@@ -46,7 +46,7 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
         MANUAL
     }
 
-    uint256 public constant MIN_CERTIFICATION_LOCK = 180 days;
+    uint256 public constant DEFAULT_MIN_CERTIFICATION_LOCK = 180 days;
 
     struct VaultConfig {
         address vaultOwner;
@@ -97,6 +97,7 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
     address public immutable vaultFactory;
     address public immutable launchRegistry;
     address public immutable pancakeRouter;
+    uint256 public immutable minCertificationLock;
     address public owner;
 
     mapping(bytes32 => LaunchRecord) public launches;
@@ -160,13 +161,15 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
         uint256 _launchFee,
         address _vaultFactory,
         address _launchRegistry,
-        address _pancakeRouter
+        address _pancakeRouter,
+        uint256 _minCertificationLock
     ) {
         if (_brigidToken == address(0)) revert ZeroAddress();
         if (_feeRecipient == address(0)) revert ZeroAddress();
         if (_vaultFactory == address(0)) revert ZeroAddress();
         if (_launchRegistry == address(0)) revert ZeroAddress();
         if (_pancakeRouter == address(0)) revert ZeroAddress();
+        if (_minCertificationLock == 0) revert ZeroAmount();
 
         brigidToken = IERC20(_brigidToken);
         feeRecipient = _feeRecipient;
@@ -174,6 +177,7 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
         vaultFactory = _vaultFactory;
         launchRegistry = _launchRegistry;
         pancakeRouter = _pancakeRouter;
+        minCertificationLock = _minCertificationLock;
         owner = msg.sender;
     }
 
@@ -275,8 +279,8 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
         }
         if (msg.value == 0) revert ZeroAmount();
         if (params.tokenAmountDesired == 0) revert ZeroAmount();
-        if (params.lockDurationSeconds < MIN_CERTIFICATION_LOCK) {
-            revert LockDurationTooShort(params.lockDurationSeconds, MIN_CERTIFICATION_LOCK);
+        if (params.lockDurationSeconds < minCertificationLock) {
+            revert LockDurationTooShort(params.lockDurationSeconds, minCertificationLock);
         }
         if (params.tokenAmountDesired > launch.lpReserve) {
             revert InsufficientEscrowedReserve(params.tokenAmountDesired, launch.lpReserve);

@@ -4,6 +4,15 @@ This document summarizes major public-facing milestones for the Brigid Forge con
 
 It is intentionally narrower than the full internal development log and focuses on contract evolution, hardening, testing, and release readiness.
 
+## 2026-04-20
+
+### Launch-session authorization hardening and live-RPC fork validation
+
+- Strengthened authorization on the public launchpad's server-side launch-session surface. Each session interaction now requires a wallet-signed proof tied to the wallet that created the session, so unrelated callers cannot read, modify, or delete another wallet's launch record.
+- Tightened the launchpad-to-service trust boundary so callers that omit an origin can no longer bypass the origin check.
+- Validated the BSC testnet fork test against a live RPC for the first time, confirming the launch orchestrator's PancakeSwap integration behaves correctly against the real router and factory instead of only against a synthetic fork.
+- Re-ran the full contract, service, launchpad, and browser-integration test tiers end-to-end with the hardened authorization model in place.
+
 ## 2026-04-11
 
 ### Launch workflow and verification alignment
