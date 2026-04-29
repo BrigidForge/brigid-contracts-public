@@ -93,7 +93,7 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
 
     IERC20 public immutable brigidToken;
     address public immutable feeRecipient;
-    uint256 public immutable launchFee;
+    uint256 public launchFee;
     address public immutable vaultFactory;
     address public immutable launchRegistry;
     address public immutable pancakeRouter;
@@ -106,7 +106,15 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
 
     uint256 public totalLaunches;
 
+    /// @notice Native (BNB) amounts owed to deployers when an inline refund call fails.
+    /// @dev Pull-pattern fallback used when `msg.sender.call{value: ...}("")` fails
+    ///      (e.g. deployer is a contract that rejects ETH callbacks). Without this
+    ///      the entire activateLaunch transaction would revert and the launch would
+    ///      be permanently stuck in CREATED state.
+    mapping(address => uint256) public pendingNativeRefunds;
+
     event FeePaid(address indexed user, uint256 amount, address indexed recipient);
+    event LaunchFeeUpdated(uint256 previousFee, uint256 newFee);
     event LaunchCreated(
         bytes32 indexed launchId,
         address indexed deployer,
@@ -126,6 +134,8 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
     event LaunchCertified(bytes32 indexed launchId);
     event LaunchMarkedManual(bytes32 indexed launchId, uint256 releasedReserve);
     event OwnershipTransferred(address indexed previous, address indexed next);
+    event NativeRefundStored(address indexed recipient, uint256 amount);
+    event NativeRefundClaimed(address indexed recipient, uint256 amount);
 
     error NotOwner();
     error LaunchAlreadyExists(bytes32 launchId);
@@ -331,7 +341,13 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
         uint256 unusedNative = msg.value - amountETH;
         if (unusedNative > 0) {
             (bool refundOk,) = msg.sender.call{value: unusedNative}("");
-            require(refundOk, "Native refund failed");
+            if (!refundOk) {
+                // Fallback to the pull pattern. Deployer claims via claimNativeRefund.
+                // This prevents launches from being permanently locked when the
+                // deployer is a contract that rejects ETH callbacks.
+                pendingNativeRefunds[msg.sender] += unusedNative;
+                emit NativeRefundStored(msg.sender, unusedNative);
+            }
         }
 
         emit LaunchActivated(
@@ -365,6 +381,17 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
         }
 
         emit LaunchMarkedManual(launchId, releasedReserve);
+    }
+
+    /// @notice Claim native refund stored when an inline refund call failed.
+    /// @dev Pull pattern: caller drains their own balance to themselves via call.
+    function claimNativeRefund() external nonReentrant {
+        uint256 amount = pendingNativeRefunds[msg.sender];
+        if (amount == 0) revert ZeroAmount();
+        pendingNativeRefunds[msg.sender] = 0;
+        (bool ok,) = msg.sender.call{value: amount}("");
+        require(ok, "Native refund send failed");
+        emit NativeRefundClaimed(msg.sender, amount);
     }
 
     function getLaunch(bytes32 launchId)
@@ -410,6 +437,12 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
 
     function computeLaunchId(address deployer, address token) external view returns (bytes32) {
         return _computeLaunchId(deployer, token);
+    }
+
+    function setLaunchFee(uint256 newLaunchFee) external onlyOwner {
+        uint256 previousFee = launchFee;
+        launchFee = newLaunchFee;
+        emit LaunchFeeUpdated(previousFee, newLaunchFee);
     }
 
     function transferOwnership(address newOwner) external onlyOwner {

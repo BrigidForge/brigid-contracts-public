@@ -22,7 +22,13 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
  * - Permissionless execution after delay
  *
  * Important Constraints:
- * - Fee-on-transfer tokens are NOT supported
+ * - Brigid-approved base tokens must be standard non-rebasing, non-fee-on-transfer,
+ *   non-blacklisting, non-admin-burn ERC-20 tokens unless explicitly approved
+ *   through a future compatibility process.
+ * - Fee-on-transfer, rebasing, blacklistable, admin-burnable, or any
+ *   balance-manipulating tokens are NOT supported unless explicitly approved.
+ * - Balance-delta verification in fund() and executeWithdrawal() will revert
+ *   if the token balance changes unpredictably during transfer.
  * - Constructor enforces cancelWindow < withdrawalDelay
  *
  * Key Behaviors:
@@ -55,6 +61,7 @@ contract BrigidVault is ReentrancyGuard {
     error AmountExceedsAvailable();
     error InvalidRequestType();
     error FundingAmountMismatch();
+    error TransferAmountMismatch();
 
     event Funded(address indexed token, uint256 amount);
 
@@ -136,13 +143,10 @@ contract BrigidVault is ReentrancyGuard {
     /// @dev Keep this struct shape unchanged for UI compatibility.
     ///
     ///      **Zombie-state notice:** when a request's `expiresAt` timestamp passes,
-    ///      the struct fields are NOT immediately zeroed in storage.  Cleanup only
-    ///      occurs when `_clearRequest` runs inside a *successful* (non-reverting)
-    ///      state-changing transaction — such as `requestWithdrawal`,
-    ///      `requestExcessWithdrawal`, `cancelWithdrawal`, or `clearExpiredRequest`.
-    ///      If a caller attempts `executeWithdrawal` on an already-expired request
-    ///      the internal cleanup runs but is rolled back along with the revert, so
-    ///      the stale struct fields remain in storage until the next successful call.
+    ///      the struct fields are NOT immediately zeroed in storage.  Cleanup occurs
+    ///      when `_clearRequest` runs inside a successful state-changing transaction
+    ///      — such as `requestWithdrawal`, `requestExcessWithdrawal`, `cancelWithdrawal`,
+    ///      `executeWithdrawal` (on expiry), or `clearExpiredRequest`.
     ///
     ///      All view logic (e.g. `isWithdrawalActive`, `hasActiveRequest`,
     ///      `activeRequestedAmount`) gates on `expiresAt` rather than `exists` alone,
@@ -343,25 +347,39 @@ contract BrigidVault is ReentrancyGuard {
 
     /// @notice Execute a pending withdrawal once the delay has elapsed and the
     ///         execution window is still open.
-    /// @dev    **Revert-rollback behavior:** `_clearRequest` runs first to evict
-    ///         any expired request from storage.  If the request *is* expired,
-    ///         `_clearRequest` deletes the struct and resets `pendingRequestType`,
-    ///         then this function reverts with `NoActiveRequest`.  Because the EVM
-    ///         rolls back all state changes on revert, the cleanup performed by
-    ///         `_clearRequest` is also rolled back — the stale struct and type
-    ///         remain in storage until the next successful state-changing call.
-    ///         Off-chain observers should not infer successful cleanup from a
-    ///         reverted `executeWithdrawal` transaction.
+    /// @dev    `_clearRequest` runs first to evict any expired request from storage.
+    ///         If the request *is* expired, `_clearRequest` deletes the struct and
+    ///         resets `pendingRequestType`, and this function returns cleanly so the
+    ///         cleanup is persisted.  The owner can then create a new request.
+    ///         If no request ever existed, it reverts with `NoActiveRequest`.
     function executeWithdrawal() external nonReentrant {
+        bool wasExpired = pendingWithdrawal.exists && block.timestamp > pendingWithdrawal.expiresAt;
         _clearRequest();
 
-        if (!pendingWithdrawal.exists) revert NoActiveRequest();
+        if (!pendingWithdrawal.exists) {
+            if (wasExpired) {
+                // Expired request was successfully cleared; allow owner to re-request.
+                return;
+            }
+            revert NoActiveRequest();
+        }
         if (block.timestamp < pendingWithdrawal.executableAt) revert TooEarly();
         if (block.timestamp > pendingWithdrawal.expiresAt) revert RequestExpired();
 
         uint256 amount = pendingWithdrawal.amount;
         bytes32 purposeHash = pendingWithdrawal.purposeHash;
         uint8 requestType = pendingRequestType;
+
+        // Dual balance-delta verification: ensure the exact amount leaves the vault
+        // AND the exact amount arrives at the recipient. Rejects fee-on-transfer,
+        // partial-transfer, silent-failure, and balance-manipulating tokens.
+        uint256 vaultBalanceBefore = token.balanceOf(address(this));
+        uint256 recipientBalanceBefore = token.balanceOf(owner);
+        token.safeTransfer(owner, amount);
+        uint256 vaultBalanceAfter = token.balanceOf(address(this));
+        uint256 recipientBalanceAfter = token.balanceOf(owner);
+        if (vaultBalanceBefore - vaultBalanceAfter != amount) revert TransferAmountMismatch();
+        if (recipientBalanceAfter - recipientBalanceBefore != amount) revert TransferAmountMismatch();
 
         if (requestType == REQUEST_TYPE_PROTECTED) {
             totalWithdrawn += amount;
@@ -373,8 +391,6 @@ contract BrigidVault is ReentrancyGuard {
 
         delete pendingWithdrawal;
         pendingRequestType = REQUEST_TYPE_NONE;
-
-        token.safeTransfer(owner, amount);
 
         emit WithdrawalExecutedTyped(
             msg.sender,
