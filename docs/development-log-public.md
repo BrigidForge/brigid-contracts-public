@@ -4,6 +4,25 @@ This document summarizes major public-facing milestones for the Brigid Forge con
 
 It is intentionally narrower than the full internal development log and focuses on contract evolution, hardening, testing, and release readiness.
 
+## 2026-05-01
+
+### Subscription lifecycle automation and infrastructure resilience
+
+- Deployed production n8n workflow infrastructure for the Brigid ecosystem. Handles subscription lifecycle events (started, expiring, expired, renewed), beacon event monitoring, launch completion handling, and system health monitoring.
+- Subscription events are authenticated via HMAC-signed webhooks with per-event IDs to prevent replay attacks.
+- Hardened the launch completed handler to prevent false-success signals from incomplete launch states.
+- Formalized server disaster recovery procedures and hardened backup capture for Forgejo and Postgres, fixing path issues that could produce empty or missing backup files under certain failure modes.
+
+## 2026-04-29
+
+### Contract hardening suite — public repository synchronized to audit branch
+
+- Synchronized the public contract repository to the canonical audit-branch versions. All 7 contracts are now byte-identical between the public and private repositories, verified with `diff -q`.
+- **BrigidVault**: Added dual balance-delta verification in `fund()` and `executeWithdrawal()`. Rejects fee-on-transfer tokens, silent-failure tokens, and balance-manipulating tokens by requiring that the pre/post balance delta equals the stated amount. Cleaned up expired-request handling.
+- **BrigidVaultFactory**: Added `BrigidTokenRegistry` whitelist enforcement so only approved tokens can be used in vault creation and launch workflows. Added explicit bounds on `withdrawalDelay`, `executionWindow`, and `cancelWindow`. Added overflow protection on delay+window arithmetic. Replaced shared EIP-712 nonces with per-deployer single-use nonces. Added `MAX_START_OFFSET` (5 years) and `MAX_CLIFF_DURATION` (10 years) caps. Decoupled ownership transfer so new owners are not automatically authorized.
+- **BrigidLaunchOrchestrator**: Added an updateable `launchFee` with `onlyOwner` setter and `LaunchFeeUpdated` event. Replaced the inline-only native-refund path with a pull-pattern fallback (`pendingNativeRefunds` + `claimNativeRefund`) to prevent launches from being bricked when deployers reject ETH.
+- **BrigidTokenRegistry**: Previously internal-only; added to the public contract bundle as a required dependency for the factory.
+
 ## 2026-04-20
 
 ### Launch-session authorization hardening and live-RPC fork validation
