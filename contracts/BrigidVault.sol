@@ -138,7 +138,10 @@ contract BrigidVault is ReentrancyGuard {
     /// @notice Minimum execution window duration.  Ensures observers have
     ///         sufficient time to react to a pending withdrawal before it
     ///         expires and the request must be re-submitted.
-    uint256 public constant MIN_EXECUTION_WINDOW = 6 hours;
+    // TEMP TESTNET REHEARSAL: lowered from 6 hours so withdrawal execution can
+    // be tested end-to-end in one short live testnet session. Restore to
+    // 6 hours before returning this branch to production/mainnet standards.
+    uint256 public constant MIN_EXECUTION_WINDOW = 10 minutes;
 
     /// @dev Keep this struct shape unchanged for UI compatibility.
     ///

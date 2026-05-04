@@ -23,9 +23,17 @@ contract BrigidVaultFactory is Ownable, ReentrancyGuard, EIP712 {
     using ECDSA for bytes32;
 
     string public constant VERSION = "1.3.0";
-    uint256 public constant MIN_EXECUTION_WINDOW = 6 hours;
+    // TEMP TESTNET REHEARSAL: lowered from 6 hours so live testnet withdrawal
+    // execution can complete in one short session. Restore to 6 hours before
+    // returning this branch to production/mainnet standards.
+    uint256 public constant MIN_EXECUTION_WINDOW = 10 minutes;
     uint256 public constant MAX_EXECUTION_WINDOW = 90 days;
-    uint256 public constant MIN_CANCEL_WINDOW = 1 hours;
+    // TEMP TESTNET REHEARSAL: lowered from 1 hour so cancellation can be
+    // exercised quickly. Restore to 1 hour before production/mainnet use.
+    uint256 public constant MIN_CANCEL_WINDOW = 1 minutes;
+    // TEMP TESTNET REHEARSAL: explicit lower bound for the shortened delay.
+    // Restore production policy before production/mainnet use.
+    uint256 public constant MIN_WITHDRAWAL_DELAY = 5 minutes;
     uint256 public constant MAX_WITHDRAWAL_DELAY = 365 days;
     uint256 public constant DEPLOY_TIME_START = 0;
     /// @notice Cap on how far in the future a vault may be scheduled to start.
@@ -296,7 +304,7 @@ contract BrigidVaultFactory is Ownable, ReentrancyGuard, EIP712 {
         require(funder != address(0), "Invalid funder");
         require(totalAllocation > 0, "Invalid allocation");
         require(!invalidSchedule, "Invalid schedule");
-        require(withdrawalDelay > MIN_CANCEL_WINDOW && withdrawalDelay <= MAX_WITHDRAWAL_DELAY, "Delay out of bounds");
+        require(withdrawalDelay >= MIN_WITHDRAWAL_DELAY && withdrawalDelay <= MAX_WITHDRAWAL_DELAY, "Delay out of bounds");
         require(executionWindow >= MIN_EXECUTION_WINDOW && executionWindow <= MAX_EXECUTION_WINDOW, "Invalid execution window");
         require(cancelWindow >= MIN_CANCEL_WINDOW && cancelWindow < withdrawalDelay, "Cancel window invalid");
         require(executionWindow <= type(uint256).max - withdrawalDelay, "Delay+window overflow");
