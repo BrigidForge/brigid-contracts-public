@@ -8,6 +8,9 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 /// @notice Fixed-supply ERC20 intended for Launchpad-driven deployments.
 /// @dev Mints the full supply once in the constructor to the initial owner.
 contract BrigidLaunchToken is ERC20, Ownable {
+    bytes32 public constant BRIGID_LAUNCH_TOKEN_TEMPLATE =
+        keccak256("BrigidLaunchToken:v1:fixed-supply-ownerless-after-launch");
+
     uint8 private immutable _customDecimals;
 
     constructor(

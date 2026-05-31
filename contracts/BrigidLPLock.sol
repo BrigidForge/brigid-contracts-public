@@ -29,7 +29,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
  * 4. After unlockTime, owner calls withdraw().
  *
  * Important constraints:
- * - Fee-on-transfer LP tokens are NOT supported.
+ * - Fee-on-transfer LP tokens are recorded by actual received balance delta.
  * - unlockTime must be strictly in the future at construction.
  */
 contract BrigidLPLock is ReentrancyGuard {
@@ -104,12 +104,15 @@ contract BrigidLPLock is ReentrancyGuard {
         if (amount == 0) revert ZeroAmount();
         if (deposited) revert AlreadyDeposited();
 
-        deposited = true;
-        depositedAmount = amount;
-
+        uint256 beforeBalance = lpToken.balanceOf(address(this));
         lpToken.safeTransferFrom(msg.sender, address(this), amount);
+        uint256 received = lpToken.balanceOf(address(this)) - beforeBalance;
+        if (received == 0) revert ZeroAmount();
 
-        emit Deposited(owner, address(lpToken), amount, unlockTime);
+        deposited = true;
+        depositedAmount = received;
+
+        emit Deposited(owner, address(lpToken), received, unlockTime);
     }
 
     /**

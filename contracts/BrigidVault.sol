@@ -29,7 +29,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
  *   balance-manipulating tokens are NOT supported unless explicitly approved.
  * - Balance-delta verification in fund() and executeWithdrawal() will revert
  *   if the token balance changes unpredictably during transfer.
- * - Constructor enforces cancelWindow < withdrawalDelay
+ * - Constructor enforces fixed cancellation and execution windows plus bounded delay
  *
  * Key Behaviors:
  * - Funding uses balance-delta verification (pre/post balance check)
@@ -135,13 +135,10 @@ contract BrigidVault is ReentrancyGuard {
     uint8 public constant REQUEST_TYPE_PROTECTED = 1;
     uint8 public constant REQUEST_TYPE_EXCESS = 2;
 
-    /// @notice Minimum execution window duration.  Ensures observers have
-    ///         sufficient time to react to a pending withdrawal before it
-    ///         expires and the request must be re-submitted.
-    // TEMP TESTNET REHEARSAL: lowered from 6 hours so withdrawal execution can
-    // be tested end-to-end in one short live testnet session. Restore to
-    // 6 hours before returning this branch to production/mainnet standards.
-    uint256 public constant MIN_EXECUTION_WINDOW = 10 minutes;
+    uint256 public constant MIN_WITHDRAWAL_DELAY = 24 hours;
+    uint256 public constant MAX_WITHDRAWAL_DELAY = 72 hours;
+    uint256 public constant CANCELLATION_WINDOW = 1 hours;
+    uint256 public constant EXECUTION_WINDOW = 72 hours;
 
     /// @dev Keep this struct shape unchanged for UI compatibility.
     ///
@@ -231,8 +228,10 @@ contract BrigidVault is ReentrancyGuard {
         if (
             invalidSchedule ||
             (!noVesting && (intervalDuration_ == 0 || intervalCount_ == 0)) ||
-            executionWindow_ < MIN_EXECUTION_WINDOW ||
-            cancelWindow_ >= withdrawalDelay_
+            withdrawalDelay_ < MIN_WITHDRAWAL_DELAY ||
+            withdrawalDelay_ > MAX_WITHDRAWAL_DELAY ||
+            cancelWindow_ != CANCELLATION_WINDOW ||
+            executionWindow_ != EXECUTION_WINDOW
         ) {
             revert InvalidConfig();
         }

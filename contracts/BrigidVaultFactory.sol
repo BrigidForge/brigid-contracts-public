@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
@@ -19,22 +20,14 @@ import {BrigidTokenRegistry} from "./BrigidTokenRegistry.sol";
 ///      balance-delta verification. Fee-on-transfer, rebasing, blacklistable,
 ///      admin-burnable, or other balance-manipulating tokens are unsupported
 ///      unless explicitly approved by the Brigid governance layer.
-contract BrigidVaultFactory is Ownable, ReentrancyGuard, EIP712 {
+contract BrigidVaultFactory is Ownable2Step, ReentrancyGuard, EIP712 {
     using ECDSA for bytes32;
 
     string public constant VERSION = "1.3.0";
-    // TEMP TESTNET REHEARSAL: lowered from 6 hours so live testnet withdrawal
-    // execution can complete in one short session. Restore to 6 hours before
-    // returning this branch to production/mainnet standards.
-    uint256 public constant MIN_EXECUTION_WINDOW = 10 minutes;
-    uint256 public constant MAX_EXECUTION_WINDOW = 90 days;
-    // TEMP TESTNET REHEARSAL: lowered from 1 hour so cancellation can be
-    // exercised quickly. Restore to 1 hour before production/mainnet use.
-    uint256 public constant MIN_CANCEL_WINDOW = 1 minutes;
-    // TEMP TESTNET REHEARSAL: explicit lower bound for the shortened delay.
-    // Restore production policy before production/mainnet use.
-    uint256 public constant MIN_WITHDRAWAL_DELAY = 5 minutes;
-    uint256 public constant MAX_WITHDRAWAL_DELAY = 365 days;
+    uint256 public constant EXECUTION_WINDOW = 72 hours;
+    uint256 public constant CANCELLATION_WINDOW = 1 hours;
+    uint256 public constant MIN_WITHDRAWAL_DELAY = 24 hours;
+    uint256 public constant MAX_WITHDRAWAL_DELAY = 72 hours;
     uint256 public constant DEPLOY_TIME_START = 0;
     /// @notice Cap on how far in the future a vault may be scheduled to start.
     /// @dev    Prevents misconfigured vaults that effectively lock funds for an
@@ -147,15 +140,6 @@ contract BrigidVaultFactory is Ownable, ReentrancyGuard, EIP712 {
             authorizedDeployers[deployer] = allowed;
             emit AuthorizedDeployerSet(deployer, allowed);
         }
-    }
-
-    /// @notice Transfer factory ownership.
-    /// @dev    Does NOT automatically mutate authorizedDeployers. The new owner
-    ///         must explicitly be granted deployer rights via setAuthorizedDeployer
-    ///         if they require them. This decouples ownership from deployment
-    ///         authorization and prevents surprise lockouts during multisig rotation.
-    function transferOwnership(address newOwner) public override onlyOwner {
-        super.transferOwnership(newOwner);
     }
 
     // ─── Views ────────────────────────────────────────────────────────────────
@@ -305,8 +289,8 @@ contract BrigidVaultFactory is Ownable, ReentrancyGuard, EIP712 {
         require(totalAllocation > 0, "Invalid allocation");
         require(!invalidSchedule, "Invalid schedule");
         require(withdrawalDelay >= MIN_WITHDRAWAL_DELAY && withdrawalDelay <= MAX_WITHDRAWAL_DELAY, "Delay out of bounds");
-        require(executionWindow >= MIN_EXECUTION_WINDOW && executionWindow <= MAX_EXECUTION_WINDOW, "Invalid execution window");
-        require(cancelWindow >= MIN_CANCEL_WINDOW && cancelWindow < withdrawalDelay, "Cancel window invalid");
+        require(executionWindow == EXECUTION_WINDOW, "Invalid execution window");
+        require(cancelWindow == CANCELLATION_WINDOW, "Cancel window invalid");
         require(executionWindow <= type(uint256).max - withdrawalDelay, "Delay+window overflow");
         require(cliff <= MAX_CLIFF_DURATION, "Cliff too long");
         if (!noVesting) {

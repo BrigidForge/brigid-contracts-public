@@ -4,8 +4,10 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
+import "../BrigidLaunchToken.sol";
 import "./BrigidManagedLPLock.sol";
 
 /**
@@ -14,7 +16,7 @@ import "./BrigidManagedLPLock.sol";
  *
  * Phase 1 — createLaunch():
  *   1. Collect BRIGID fee via ERC20 transferFrom
- *   2. Deploy the canonical project token from constructor init code
+ *   2. Deploy the canonical Brigid launch token template
  *   3. Validate total supply + initial custody on-chain
  *   4. Create vaults on behalf of the original deployer
  *   5. Fund each vault from orchestrator-held supply
@@ -46,7 +48,19 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
         MANUAL
     }
 
+    uint8 public constant TIER_STARTER = 0;
+    uint8 public constant TIER_STANDARD = 1;
+    uint8 public constant TIER_ADVANCED = 2;
+    uint8 public constant TIER_CERTIFIED = 3;
+
     uint256 public constant DEFAULT_MIN_CERTIFICATION_LOCK = 180 days;
+    bytes32 private constant EIP712_DOMAIN_TYPEHASH =
+        keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
+    bytes32 private constant FEE_QUOTE_DOMAIN_NAME_HASH = keccak256("BrigidLaunchOrchestrator");
+    bytes32 private constant FEE_QUOTE_DOMAIN_VERSION_HASH = keccak256("1");
+    bytes32 public constant FEE_QUOTE_TYPEHASH = keccak256(
+        "FeeQuote(address orchestrator,uint256 chainId,address feeToken,address payer,uint8 launchTier,uint256 feeAmount,uint256 expiresAt,uint256 nonce)"
+    );
 
     struct VaultConfig {
         address vaultOwner;
@@ -72,15 +86,25 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
         address lpPair;
         address lpLock;
         uint256 lpReserve;
+        uint8 launchTier;
     }
 
     struct CreateLaunchParams {
-        bytes tokenInitCode;
         string tokenName;
         string tokenSymbol;
         uint256 tokenSupply;
         VaultConfig[] vaults;
         uint256 lpReserveRaw;
+        uint8 launchTier;
+    }
+
+    struct FeeQuote {
+        address payer;
+        uint8 launchTier;
+        uint256 feeAmount;
+        uint256 expiresAt;
+        uint256 nonce;
+        bytes signature;
     }
 
     struct ActivateLaunchParams {
@@ -93,16 +117,21 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
 
     IERC20 public immutable brigidToken;
     address public immutable feeRecipient;
-    uint256 public launchFee;
     address public immutable vaultFactory;
     address public immutable launchRegistry;
     address public immutable pancakeRouter;
     uint256 public immutable minCertificationLock;
     address public owner;
+    address public pendingOwner;
+    address public feeQuoteSigner;
+    bool public feeQuoteRequired;
 
+    mapping(uint8 => uint256) public launchTierFees;
+    mapping(uint8 => bool) public launchTierEnabled;
     mapping(bytes32 => LaunchRecord) public launches;
     mapping(address => bytes32[]) public deployerLaunches;
     mapping(address => bytes32) public tokenToLaunch;
+    mapping(address => mapping(uint256 => bool)) public feeQuoteNonceUsed;
 
     uint256 public totalLaunches;
 
@@ -113,14 +142,20 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
     ///      be permanently stuck in CREATED state.
     mapping(address => uint256) public pendingNativeRefunds;
 
-    event FeePaid(address indexed user, uint256 amount, address indexed recipient);
+    event FeePaid(address indexed user, uint8 indexed launchTier, uint256 amount, address indexed recipient);
     event LaunchFeeUpdated(uint256 previousFee, uint256 newFee);
+    event LaunchTierFeeUpdated(uint8 indexed launchTier, uint256 previousFee, uint256 newFee);
+    event LaunchTierStatusUpdated(uint8 indexed launchTier, bool enabled);
+    event FeeQuoteSignerUpdated(address indexed previousSigner, address indexed newSigner);
+    event FeeQuoteRequiredUpdated(bool required);
+    event FeeQuoteUsed(address indexed payer, uint8 indexed launchTier, uint256 amount, uint256 nonce, uint256 expiresAt);
     event LaunchCreated(
         bytes32 indexed launchId,
         address indexed deployer,
         address token,
         address[] vaults,
-        uint256 lpReserve
+        uint256 lpReserve,
+        uint8 launchTier
     );
     event LaunchActivated(
         bytes32 indexed launchId,
@@ -134,6 +169,7 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
     event LaunchCertified(bytes32 indexed launchId);
     event LaunchMarkedManual(bytes32 indexed launchId, uint256 releasedReserve);
     event OwnershipTransferred(address indexed previous, address indexed next);
+    event OwnershipTransferStarted(address indexed previous, address indexed pendingOwner);
     event NativeRefundStored(address indexed recipient, uint256 amount);
     event NativeRefundClaimed(address indexed recipient, uint256 amount);
 
@@ -150,8 +186,18 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
     error ZeroAddress();
     error ZeroAmount();
     error InvalidAllocationMath();
+    error InvalidLaunchTier(uint8 launchTier);
+    error LaunchTierDisabled(uint8 launchTier);
+    error FeeQuoteRequired(uint8 launchTier);
+    error FeeQuoteSignerNotConfigured();
+    error InvalidFeeQuote(address recoveredSigner);
+    error FeeQuoteExpired(uint256 expiresAt, uint256 currentTimestamp);
+    error FeeQuoteWrongPayer(address providedPayer, address expectedPayer);
+    error FeeQuoteWrongTier(uint8 providedTier, uint8 expectedTier);
+    error FeeQuoteNonceAlreadyUsed(address payer, uint256 nonce);
     error InsufficientEscrowedReserve(uint256 requested, uint256 available);
     error LockDurationTooShort(uint256 provided, uint256 minimumRequired);
+    error NotPendingOwner();
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
@@ -168,7 +214,7 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
     constructor(
         address _brigidToken,
         address _feeRecipient,
-        uint256 _launchFee,
+        uint256[4] memory _launchTierFees,
         address _vaultFactory,
         address _launchRegistry,
         address _pancakeRouter,
@@ -183,12 +229,17 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
 
         brigidToken = IERC20(_brigidToken);
         feeRecipient = _feeRecipient;
-        launchFee = _launchFee;
         vaultFactory = _vaultFactory;
         launchRegistry = _launchRegistry;
         pancakeRouter = _pancakeRouter;
         minCertificationLock = _minCertificationLock;
         owner = msg.sender;
+        feeQuoteSigner = msg.sender;
+
+        for (uint8 tier = TIER_STARTER; tier <= TIER_CERTIFIED; ++tier) {
+            launchTierFees[tier] = _launchTierFees[tier];
+            launchTierEnabled[tier] = true;
+        }
     }
 
     function createLaunch(CreateLaunchParams calldata params)
@@ -196,9 +247,25 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
         nonReentrant
         returns (bytes32 launchId)
     {
-        if (params.tokenInitCode.length == 0) revert TokenDeploymentFailed();
+        uint256 fee = _staticLaunchFeeForCreate(params.launchTier);
+        launchId = _createLaunch(params, fee);
+    }
+
+    function createLaunchWithFeeQuote(CreateLaunchParams calldata params, FeeQuote calldata quote)
+        external
+        nonReentrant
+        returns (bytes32 launchId)
+    {
+        uint256 fee = _quotedLaunchFeeForCreate(params.launchTier, quote);
+        launchId = _createLaunch(params, fee);
+    }
+
+    function _createLaunch(CreateLaunchParams calldata params, uint256 fee) internal returns (bytes32 launchId) {
         if (params.vaults.length == 0) revert ZeroAmount();
         if (params.tokenSupply == 0) revert ZeroAmount();
+        if (bytes(params.tokenName).length == 0 || bytes(params.tokenSymbol).length == 0) {
+            revert TokenValidationFailed();
+        }
 
         uint256 totalVaultAllocation;
         for (uint256 i = 0; i < params.vaults.length; ++i) {
@@ -210,17 +277,19 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
 
         if (totalVaultAllocation + params.lpReserveRaw != params.tokenSupply) revert InvalidAllocationMath();
 
-        if (launchFee > 0) {
-            brigidToken.safeTransferFrom(msg.sender, feeRecipient, launchFee);
-            emit FeePaid(msg.sender, launchFee, feeRecipient);
+        if (fee > 0) {
+            brigidToken.safeTransferFrom(msg.sender, feeRecipient, fee);
+            emit FeePaid(msg.sender, params.launchTier, fee, feeRecipient);
         }
 
-        address token;
-        bytes memory initCode = params.tokenInitCode;
-        assembly {
-            token := create(0, add(initCode, 0x20), mload(initCode))
-        }
-        if (token == address(0)) revert TokenDeploymentFailed();
+        BrigidLaunchToken deployedToken = new BrigidLaunchToken(
+            params.tokenName,
+            params.tokenSymbol,
+            18,
+            address(this),
+            params.tokenSupply
+        );
+        address token = address(deployedToken);
 
         ILaunchToken tokenContract = ILaunchToken(token);
         if (
@@ -268,13 +337,14 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
             activatedAt: 0,
             lpPair: address(0),
             lpLock: address(0),
-            lpReserve: params.lpReserveRaw
+            lpReserve: params.lpReserveRaw,
+            launchTier: params.launchTier
         });
         deployerLaunches[msg.sender].push(launchId);
         tokenToLaunch[token] = launchId;
         totalLaunches += 1;
 
-        emit LaunchCreated(launchId, msg.sender, token, vaultAddresses, params.lpReserveRaw);
+        emit LaunchCreated(launchId, msg.sender, token, vaultAddresses, params.lpReserveRaw, params.launchTier);
     }
 
     function activateLaunch(ActivateLaunchParams calldata params)
@@ -406,7 +476,8 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
             uint256 activatedAt,
             address lpPair,
             address lpLock,
-            uint256 lpReserve
+            uint256 lpReserve,
+            uint8 launchTier
         )
     {
         LaunchRecord storage r = launches[launchId];
@@ -419,7 +490,8 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
             r.activatedAt,
             r.lpPair,
             r.lpLock,
-            r.lpReserve
+            r.lpReserve,
+            r.launchTier
         );
     }
 
@@ -439,16 +511,69 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
         return _computeLaunchId(deployer, token);
     }
 
+    function launchFee() external view returns (uint256) {
+        return launchTierFees[TIER_STANDARD];
+    }
+
+    function launchFeeForTier(uint8 launchTier) public view returns (uint256) {
+        return _launchFeeForTier(launchTier);
+    }
+
     function setLaunchFee(uint256 newLaunchFee) external onlyOwner {
-        uint256 previousFee = launchFee;
-        launchFee = newLaunchFee;
-        emit LaunchFeeUpdated(previousFee, newLaunchFee);
+        _setLaunchTierFee(TIER_STANDARD, newLaunchFee);
+    }
+
+    function setLaunchTierFee(uint8 launchTier, uint256 newLaunchFee) external onlyOwner {
+        _setLaunchTierFee(launchTier, newLaunchFee);
+    }
+
+    function setLaunchTierEnabled(uint8 launchTier, bool enabled) external onlyOwner {
+        if (!_isValidLaunchTier(launchTier)) revert InvalidLaunchTier(launchTier);
+        launchTierEnabled[launchTier] = enabled;
+        emit LaunchTierStatusUpdated(launchTier, enabled);
+    }
+
+    function setFeeQuoteSigner(address newSigner) external onlyOwner {
+        if (newSigner == address(0)) revert ZeroAddress();
+        emit FeeQuoteSignerUpdated(feeQuoteSigner, newSigner);
+        feeQuoteSigner = newSigner;
+    }
+
+    function setFeeQuoteRequired(bool required) external onlyOwner {
+        feeQuoteRequired = required;
+        emit FeeQuoteRequiredUpdated(required);
+    }
+
+    function feeQuoteDigest(FeeQuote calldata quote) public view returns (bytes32) {
+        bytes32 structHash =
+            keccak256(
+                abi.encode(
+                    FEE_QUOTE_TYPEHASH,
+                    address(this),
+                    block.chainid,
+                    address(brigidToken),
+                    quote.payer,
+                    quote.launchTier,
+                    quote.feeAmount,
+                    quote.expiresAt,
+                    quote.nonce
+                )
+            );
+        return keccak256(abi.encodePacked("\x19\x01", _feeQuoteDomainSeparator(), structHash));
     }
 
     function transferOwnership(address newOwner) external onlyOwner {
         if (newOwner == address(0)) revert ZeroAddress();
-        emit OwnershipTransferred(owner, newOwner);
-        owner = newOwner;
+        pendingOwner = newOwner;
+        emit OwnershipTransferStarted(owner, newOwner);
+    }
+
+    function acceptOwnership() external {
+        if (msg.sender != pendingOwner) revert NotPendingOwner();
+        address previousOwner = owner;
+        owner = msg.sender;
+        pendingOwner = address(0);
+        emit OwnershipTransferred(previousOwner, msg.sender);
     }
 
     function _createVault(
@@ -481,6 +606,66 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
 
     function _computeLaunchId(address deployer, address token) internal view returns (bytes32) {
         return keccak256(abi.encode(block.chainid, deployer, token));
+    }
+
+    function _setLaunchTierFee(uint8 launchTier, uint256 newLaunchFee) internal {
+        if (!_isValidLaunchTier(launchTier)) revert InvalidLaunchTier(launchTier);
+        uint256 previousFee = launchTierFees[launchTier];
+        launchTierFees[launchTier] = newLaunchFee;
+        emit LaunchTierFeeUpdated(launchTier, previousFee, newLaunchFee);
+        if (launchTier == TIER_STANDARD) {
+            emit LaunchFeeUpdated(previousFee, newLaunchFee);
+        }
+    }
+
+    function _launchFeeForTier(uint8 launchTier) internal view returns (uint256) {
+        if (!_isValidLaunchTier(launchTier)) revert InvalidLaunchTier(launchTier);
+        if (!launchTierEnabled[launchTier]) revert LaunchTierDisabled(launchTier);
+        return launchTierFees[launchTier];
+    }
+
+    function _staticLaunchFeeForCreate(uint8 launchTier) internal view returns (uint256 fee) {
+        fee = _launchFeeForTier(launchTier);
+        if (feeQuoteRequired && fee > 0) revert FeeQuoteRequired(launchTier);
+    }
+
+    function _quotedLaunchFeeForCreate(uint8 launchTier, FeeQuote calldata quote) internal returns (uint256 fee) {
+        uint256 configuredFee = _launchFeeForTier(launchTier);
+        if (configuredFee == 0) return 0;
+        if (!feeQuoteRequired && quote.signature.length == 0) return configuredFee;
+        fee = _verifyFeeQuote(launchTier, quote);
+    }
+
+    function _verifyFeeQuote(uint8 launchTier, FeeQuote calldata quote) internal returns (uint256) {
+        if (feeQuoteSigner == address(0)) revert FeeQuoteSignerNotConfigured();
+        if (quote.payer != msg.sender) revert FeeQuoteWrongPayer(quote.payer, msg.sender);
+        if (quote.launchTier != launchTier) revert FeeQuoteWrongTier(quote.launchTier, launchTier);
+        if (quote.expiresAt < block.timestamp) revert FeeQuoteExpired(quote.expiresAt, block.timestamp);
+        if (quote.feeAmount == 0) revert ZeroAmount();
+        if (feeQuoteNonceUsed[quote.payer][quote.nonce]) revert FeeQuoteNonceAlreadyUsed(quote.payer, quote.nonce);
+
+        address recovered = ECDSA.recover(feeQuoteDigest(quote), quote.signature);
+        if (recovered != feeQuoteSigner) revert InvalidFeeQuote(recovered);
+
+        feeQuoteNonceUsed[quote.payer][quote.nonce] = true;
+        emit FeeQuoteUsed(quote.payer, quote.launchTier, quote.feeAmount, quote.nonce, quote.expiresAt);
+        return quote.feeAmount;
+    }
+
+    function _feeQuoteDomainSeparator() internal view returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                EIP712_DOMAIN_TYPEHASH,
+                FEE_QUOTE_DOMAIN_NAME_HASH,
+                FEE_QUOTE_DOMAIN_VERSION_HASH,
+                block.chainid,
+                address(this)
+            )
+        );
+    }
+
+    function _isValidLaunchTier(uint8 launchTier) internal pure returns (bool) {
+        return launchTier <= TIER_CERTIFIED;
     }
 
     receive() external payable {}

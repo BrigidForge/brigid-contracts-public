@@ -68,11 +68,15 @@ contract BrigidManagedLPLock is ReentrancyGuard {
         if (amount == 0) revert ZeroAmount();
         if (deposited) revert AlreadyDeposited();
 
-        deposited = true;
-        depositedAmount = amount;
+        uint256 beforeBalance = lpToken.balanceOf(address(this));
         lpToken.safeTransferFrom(msg.sender, address(this), amount);
+        uint256 received = lpToken.balanceOf(address(this)) - beforeBalance;
+        if (received == 0) revert ZeroAmount();
 
-        emit Deposited(beneficiary, depositor, address(lpToken), amount, unlockTime);
+        deposited = true;
+        depositedAmount = received;
+
+        emit Deposited(beneficiary, depositor, address(lpToken), received, unlockTime);
     }
 
     function withdraw() external onlyBeneficiary nonReentrant {

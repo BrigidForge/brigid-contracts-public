@@ -25,7 +25,7 @@ interface IVault {
 ///      - Every vault is validated against the factory at registration time:
 ///        (1) was deployed via factory  (2) is linked to correct token
 ///      - No post-registration mutation of the launch record
-///      - No admin functions, no owner, no upgradability, no custody
+///      - Registrar-gated delegated registration, no upgradability, no custody
 ///      - Emits events for indexer consumption only
 ///
 ///      What this contract explicitly does NOT do:
@@ -53,6 +53,10 @@ contract BrigidLaunchRegistry is ReentrancyGuard {
     /// @notice The chain ID baked into launch identity.
     uint256 public immutable registryChainId;
 
+    address public owner;
+    address public pendingOwner;
+    address public registrar;
+
     /// @notice launchId → record
     mapping(bytes32 => LaunchRecord) internal _launches;
 
@@ -73,6 +77,9 @@ contract BrigidLaunchRegistry is ReentrancyGuard {
         uint256[] vaultAllocations,
         uint256 registeredAt
     );
+    event RegistrarUpdated(address indexed previousRegistrar, address indexed newRegistrar);
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+    event OwnershipTransferStarted(address indexed previousOwner, address indexed pendingOwner);
 
     error TokenAlreadyRegistered();
     error InvalidToken();
@@ -82,6 +89,20 @@ contract BrigidLaunchRegistry is ReentrancyGuard {
     error VaultNotFromFactory(address vault);
     error VaultCreatorMismatch(address vault, address expectedCreator, address actualCreator);
     error VaultTokenMismatch(address vault, address expectedToken, address actualToken);
+    error NotOwner();
+    error NotPendingOwner();
+    error NotRegistrar();
+    error ZeroAddress();
+
+    modifier onlyOwner() {
+        if (msg.sender != owner) revert NotOwner();
+        _;
+    }
+
+    modifier onlyRegistrar() {
+        if (msg.sender != registrar) revert NotRegistrar();
+        _;
+    }
 
     /// @param factory_ The canonical BrigidVaultFactory to validate against.
     /// @param chainId_ The chain ID for deterministic launch ID computation.
@@ -90,6 +111,27 @@ contract BrigidLaunchRegistry is ReentrancyGuard {
         require(chainId_ > 0, "Invalid chainId");
         vaultFactory = IVaultFactory(factory_);
         registryChainId = chainId_;
+        owner = msg.sender;
+    }
+
+    function setRegistrar(address newRegistrar) external onlyOwner {
+        if (newRegistrar == address(0)) revert ZeroAddress();
+        emit RegistrarUpdated(registrar, newRegistrar);
+        registrar = newRegistrar;
+    }
+
+    function transferOwnership(address newOwner) external onlyOwner {
+        if (newOwner == address(0)) revert ZeroAddress();
+        pendingOwner = newOwner;
+        emit OwnershipTransferStarted(owner, newOwner);
+    }
+
+    function acceptOwnership() external {
+        if (msg.sender != pendingOwner) revert NotPendingOwner();
+        address previousOwner = owner;
+        owner = msg.sender;
+        pendingOwner = address(0);
+        emit OwnershipTransferred(previousOwner, msg.sender);
     }
 
     /// @notice Compute the deterministic launch ID for a deployer+token pair.
@@ -119,7 +161,7 @@ contract BrigidLaunchRegistry is ReentrancyGuard {
         address deployer,
         address token,
         address[] calldata vaults
-    ) external nonReentrant returns (bytes32 launchId) {
+    ) external nonReentrant onlyRegistrar returns (bytes32 launchId) {
         return _registerLaunch(deployer, token, vaults);
     }
 
