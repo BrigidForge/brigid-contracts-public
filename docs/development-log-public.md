@@ -6,6 +6,13 @@ It is intentionally narrower than the full internal development log and focuses 
 
 ## 2026-06-18
 
+### Public contract mirror refresh
+
+- Synchronized the public contract bundle to the latest approved private contract sources.
+- Added the current Meme Launch registry/orchestrator source files to the public bundle.
+- Added the active staking, revenue router, and subscription contract sources to the public bundle.
+- Removed public-facing support docs other than this development log so the repository exposes only approved contract source, the README, and the public development log.
+
 ### Public transparency documentation and Beacon PWA presentation pass
 
 - Updated the public website's Brigid Transparency System explanation so the Beacon notification layer is described as part of the system rather than as a generic dashboard feature.

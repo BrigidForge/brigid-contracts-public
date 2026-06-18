@@ -195,6 +195,7 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
     error FeeQuoteWrongPayer(address providedPayer, address expectedPayer);
     error FeeQuoteWrongTier(uint8 providedTier, uint8 expectedTier);
     error FeeQuoteNonceAlreadyUsed(address payer, uint256 nonce);
+    error FeeTransferMismatch();
     error InsufficientEscrowedReserve(uint256 requested, uint256 available);
     error LockDurationTooShort(uint256 provided, uint256 minimumRequired);
     error NotPendingOwner();
@@ -267,7 +268,7 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
             revert TokenValidationFailed();
         }
 
-        uint256 totalVaultAllocation;
+        uint256 totalVaultAllocation = 0;
         for (uint256 i = 0; i < params.vaults.length; ++i) {
             VaultConfig calldata vc = params.vaults[i];
             if (vc.vaultOwner == address(0)) revert ZeroAddress();
@@ -276,9 +277,18 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
         }
 
         if (totalVaultAllocation + params.lpReserveRaw != params.tokenSupply) revert InvalidAllocationMath();
+        if (params.lpReserveRaw == 0) revert ZeroAmount();
 
         if (fee > 0) {
+            uint256 recipientBalanceBefore = brigidToken.balanceOf(feeRecipient);
             brigidToken.safeTransferFrom(msg.sender, feeRecipient, fee);
+            uint256 recipientBalanceAfter = brigidToken.balanceOf(feeRecipient);
+            if (
+                recipientBalanceAfter < recipientBalanceBefore
+                    || recipientBalanceAfter - recipientBalanceBefore != fee
+            ) {
+                revert FeeTransferMismatch();
+            }
             emit FeePaid(msg.sender, params.launchTier, fee, feeRecipient);
         }
 
@@ -370,7 +380,8 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
         tokenContract.forceApprove(pancakeRouter, params.tokenAmountDesired);
 
         uint256 deadline = block.timestamp + 1200;
-        (uint256 amountToken, uint256 amountETH,) = IPancakeRouter(pancakeRouter).addLiquidityETH{value: msg.value}(
+        (uint256 amountToken, uint256 amountETH, uint256 liquidity) =
+            IPancakeRouter(pancakeRouter).addLiquidityETH{value: msg.value}(
             launch.token,
             params.tokenAmountDesired,
             params.tokenAmountMin,
@@ -378,6 +389,7 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
             address(this),
             deadline
         );
+        if (liquidity == 0) revert ZeroAmount();
 
         address factory = IPancakeRouter(pancakeRouter).factory();
         address wrappedNative = IPancakeRouter(pancakeRouter).WETH();

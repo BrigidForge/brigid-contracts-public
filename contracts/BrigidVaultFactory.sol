@@ -58,7 +58,7 @@ contract BrigidVaultFactory is Ownable2Step, ReentrancyGuard, EIP712 {
 
     /// @notice Registry of Brigid-approved ERC20 tokens.
     ///         Only approved tokens may be used when creating vaults.
-    BrigidTokenRegistry public tokenRegistry;
+    BrigidTokenRegistry public immutable tokenRegistry;
 
     /// @notice Admin whitelist — bypasses the permit requirement entirely.
     ///         Intended for the factory owner and trusted internal deployers.

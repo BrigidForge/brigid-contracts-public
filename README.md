@@ -1,8 +1,8 @@
 # Brigid Contracts Public
 
-This repository contains the published contract source bundle for Brigid Forge.
+This repository contains the published public contract source bundle for Brigid Forge.
 
-It includes the contract files and supporting docs that Brigid Forge intends external readers to use for source review, deployment reference, and verification.
+It includes the contract files Brigid Forge has intentionally approved for public source review. Internal tests, mocks, deployment scripts, operational runbooks, generated artifacts, environment files, and archived material are excluded.
 
 ## Included
 
@@ -11,8 +11,14 @@ It includes the contract files and supporting docs that Brigid Forge intends ext
 - `contracts/BrigidLaunchRegistry.sol`
 - `contracts/BrigidLPLock.sol`
 - `contracts/BrigidLaunchToken.sol`
+- `contracts/BrigidTokenRegistry.sol`
 - `contracts/imports/BrigidLaunchOrchestrator.sol`
 - `contracts/imports/BrigidManagedLPLock.sol`
+- `contracts/imports/BrigidMemeLaunchOrchestrator.sol`
+- `contracts/imports/BrigidMemeLaunchRegistry.sol`
+- `contracts/staking/BrigidStaking.sol`
+- `contracts/staking/BrigidRevenueRouter.sol`
+- `contracts/staking/BrigidSubscription.sol`
 
 ## Intentionally Excluded
 
@@ -21,17 +27,16 @@ It includes the contract files and supporting docs that Brigid Forge intends ext
 - adversarial harnesses
 - deployment scripts
 - operational runbooks
+- environment files and secrets
+- generated artifacts and caches
 - archived and legacy material
 
 ## Publication Scope
 
-This repository is published intentionally as a focused public contract bundle. Public releases may be updated over time as Brigid Forge publishes new verified contract sets and related documentation.
+This repository is published intentionally as a focused public contract bundle. Public releases may be updated over time as Brigid Forge publishes new verified contract sets.
+
+All rights are reserved unless and until a final public license is selected.
 
 ## Public Docs
 
-- [Overview](docs/overview.md)
 - [Public Development Log](docs/development-log-public.md)
-- [Deployments](docs/deployments.md)
-- [Security Model](docs/security-model.md)
-- [Verification](docs/verification.md)
-- [Versioning](docs/versioning.md)
