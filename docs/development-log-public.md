@@ -4,6 +4,63 @@ This document summarizes major public-facing milestones for the Brigid Forge con
 
 It is intentionally narrower than the full internal development log and focuses on contract evolution, hardening, testing, and release readiness.
 
+## 2026-06-18
+
+### Public transparency documentation and Beacon PWA presentation pass
+
+- Updated the public website's Brigid Transparency System explanation so the Beacon notification layer is described as part of the system rather than as a generic dashboard feature.
+- Added public-facing Beacon Web App / PWA notification presentation using the actual Brigid Beacon app artwork and notification imagery. The presentation now shows holder-facing vault activity notifications inside a phone-style frame.
+- Consolidated the Brigid Beacon section to reduce repeated alert/channel language. The app notification panel now carries the primary explanation of how Beacon reaches holders.
+- Removed obsolete simulated operator-panel and withdrawal-interface mockups from the website and static launch-guide pages. The public vault lifecycle explanation now focuses on the contract path: request, notify, wait, execute, archive.
+- Updated the Brigid Vault section to emphasize user-selected deployment parameters instead of fixed example values. The public page now calls out configurable choices such as developer allocation, treasury allocation, beneficiary address, withdrawal delay, vesting schedule, and tier-dependent custom vaults.
+- Tightened BRIGID token utility language so it no longer implies unsupported dashboard functionality. The utility list now keeps hard requirements where they apply (launch/BLS path and Beacon monitoring access) and uses future ecosystem development language for future tools.
+- Updated optimized asset generation to stop producing the removed vault-withdrawal mockup, preventing future builds from recreating deleted public assets.
+- Verified the website build after the documentation and asset updates.
+
+## 2026-06-12
+
+### Mainnet release guardrails and environment isolation
+
+- Added environment isolation guardrails across hosted deployment tooling so genesis, testnet, staging, and mainnet profiles are handled explicitly rather than inferred from local state.
+- Normalized deployment environment handling and branch routing so production deploys from `main` use the intended runtime configuration.
+- Added mainnet staging/readiness tooling, runbook material, and pre-launch guardrails for the switch from testnet validation toward production launch.
+- Expanded deploy checks and cleanup behavior to avoid stale generated paths, incorrect repository detection, or accidental cross-environment configuration drift.
+- Recorded mainnet pre-LP readiness checks and clarified remaining launch gates so public launch readiness is easier to audit before activation.
+
+## 2026-05-31
+
+### Security audit remediation and public source synchronization
+
+- Remediated the 2026-05-31 security audit findings in the active contract codebase and synchronized the remediated contract sources into the public repository.
+- Updated public Slither cleanup sources and filtered non-production contracts from the Slither gate so public analysis focuses on deployable contract surfaces.
+- Recorded residual-risk signoff for the Slither pass after cleanup, keeping the public audit posture aligned with the current release candidate.
+- Expanded isolated deploy roots and related environment checks so the public contract release process matches the hardened deployment workflow.
+
+## 2026-05-17
+
+### Deployment automation, environment sync, and mainnet guardrails
+
+- Added and hardened testnet server deployment automation, including remote environment apply mode, generated-path cleanup, and environment-audit cleanup behavior.
+- Guarded hosted executor Beacon API configuration so hosted execution surfaces cannot silently point at an unintended Beacon API endpoint.
+- Synchronized launch fee recipient and staking revenue router environment variables through the root environment tooling.
+- Added mainnet switch runbook material and server environment guardrails to document the remaining production activation path.
+- Added adversarial test orchestration and Slither runner workflow support earlier in the cycle so security checks could be run consistently before release gates.
+
+## 2026-05-03
+
+### Public testnet vault timing bounds
+
+- Synchronized public testnet vault timing bounds in `BrigidVault` and `BrigidVaultFactory`, keeping the public contract sources aligned with the active testnet release posture.
+- Kept public contract behavior focused on the hardened timing model that would later feed the security-audit remediation and release-candidate synchronization work.
+
+## 2026-05-02
+
+### Staking and revenue stack alignment
+
+- Rotated the active BSC testnet staking and revenue stack to the BRIGIDPAY protocol token.
+- Deployed and wired the testnet staking contract, revenue router, treasury destination, and burn destination for the updated protocol-token stack.
+- Confirmed the router's hold-and-distribute model: product revenue accumulates in the router until owner-triggered distribution, then splits 50% treasury, 40% staking, and 10% burn.
+
 ## 2026-05-01
 
 ### Subscription lifecycle automation and infrastructure resilience
