@@ -4,6 +4,16 @@ This repository contains the published public contract source bundle for Brigid 
 
 It includes the contract files Brigid Forge has intentionally approved for public source review. Internal tests, mocks, deployment scripts, operational runbooks, generated artifacts, environment files, and archived material are excluded.
 
+## Official Brigid Forge Links
+
+- [Brigid Forge website](https://brigidforge.com/)
+- [Token launch guide library](https://brigidforge.com/guides/)
+- [BNB token launch technical checklist](https://brigidforge.com/token-launch-technical-checklist/)
+- [Brigid Launch Standard](https://brigidforge.com/brigid-launch-standard/)
+- [Brigid Transparency System](https://brigidforge.com/transparency/)
+- [BRIGID token overview](https://brigidforge.com/token/)
+- [Disclosures and risk notice](https://brigidforge.com/disclosures-risk-notice/)
+
 ## Included
 
 - `contracts/BrigidVault.sol`
