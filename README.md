@@ -28,20 +28,21 @@ Private environment repos and operational repos remain internal source-of-truth 
 
 ## Included
 
-- `contracts/BrigidVault.sol`
-- `contracts/BrigidVaultFactory.sol`
-- `contracts/BrigidLaunchRegistry.sol`
-- `contracts/BrigidLPLock.sol`
-- `contracts/BrigidLaunchToken.sol`
-- `contracts/BrigidTokenRegistry.sol`
-- `contracts/BrigidUncxV1LPLockerAdapter.sol`
-- `contracts/imports/BrigidLaunchOrchestrator.sol`
-- `contracts/imports/BrigidManagedLPLock.sol`
-- `contracts/imports/BrigidMemeLaunchOrchestrator.sol`
-- `contracts/imports/BrigidMemeLaunchRegistry.sol`
-- `contracts/staking/BrigidStaking.sol`
-- `contracts/staking/BrigidRevenueRouter.sol`
-- `contracts/staking/BrigidSubscription.sol`
+- [Contract source index](contracts/README.md)
+- [BrigidVault](contracts/BrigidVault.sol)
+- [BrigidVaultFactory](contracts/BrigidVaultFactory.sol)
+- [BrigidLaunchRegistry](contracts/BrigidLaunchRegistry.sol)
+- [BrigidLPLock](contracts/BrigidLPLock.sol)
+- [BrigidLaunchToken](contracts/BrigidLaunchToken.sol)
+- [BrigidTokenRegistry](contracts/BrigidTokenRegistry.sol)
+- [BrigidUncxV1LPLockerAdapter](contracts/BrigidUncxV1LPLockerAdapter.sol)
+- [BrigidLaunchOrchestrator](contracts/imports/BrigidLaunchOrchestrator.sol)
+- [BrigidManagedLPLock](contracts/imports/BrigidManagedLPLock.sol)
+- [BrigidMemeLaunchOrchestrator](contracts/imports/BrigidMemeLaunchOrchestrator.sol)
+- [BrigidMemeLaunchRegistry](contracts/imports/BrigidMemeLaunchRegistry.sol)
+- [BrigidStaking](contracts/staking/BrigidStaking.sol)
+- [BrigidRevenueRouter](contracts/staking/BrigidRevenueRouter.sol)
+- [BrigidSubscription](contracts/staking/BrigidSubscription.sol)
 
 ## Intentionally Excluded
 
