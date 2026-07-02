@@ -1,8 +1,20 @@
-# Brigid Contracts Public
+# Brigid Forge Public Contracts
 
-This repository contains the published public contract source bundle for Brigid Forge.
+This repository contains the curated public contract source bundle for Brigid Forge.
 
-It includes the contract files Brigid Forge has intentionally approved for public source review. Internal tests, mocks, deployment scripts, operational runbooks, generated artifacts, environment files, and archived material are excluded.
+It includes the production-facing contract files Brigid Forge has intentionally approved for public source review. Internal tests, mocks, deployment scripts, operational runbooks, generated artifacts, environment files, and archived material are excluded.
+
+## Current Public Scope
+
+This is the clean public source surface for Brigid Forge contracts. The broader Brigid Forge product workspace includes private launch, indexing, deployment, admin, and operations code that is intentionally not published here.
+
+Public visitors should use this repository for:
+
+- contract source review
+- public development history
+- high-level understanding of the Brigid Vault, launch, LP-lock, meme launch, and staking/revenue contract set
+
+Private environment repos and operational repos remain internal source-of-truth repositories for deployment and infrastructure.
 
 ## Official Brigid Forge Links
 
@@ -22,6 +34,7 @@ It includes the contract files Brigid Forge has intentionally approved for publi
 - `contracts/BrigidLPLock.sol`
 - `contracts/BrigidLaunchToken.sol`
 - `contracts/BrigidTokenRegistry.sol`
+- `contracts/BrigidUncxV1LPLockerAdapter.sol`
 - `contracts/imports/BrigidLaunchOrchestrator.sol`
 - `contracts/imports/BrigidManagedLPLock.sol`
 - `contracts/imports/BrigidMemeLaunchOrchestrator.sol`
@@ -40,6 +53,9 @@ It includes the contract files Brigid Forge has intentionally approved for publi
 - environment files and secrets
 - generated artifacts and caches
 - archived and legacy material
+- local admin/operator tooling
+- hosted backend services
+- private deployment and verification notes
 
 ## Publication Scope
 

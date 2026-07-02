@@ -115,6 +115,12 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
         uint256 lockDurationSeconds;
     }
 
+    struct ExternalLockParams {
+        ActivateLaunchParams activation;
+        uint256 nativeLiquidityAmount;
+        uint256 lockerFeeAmount;
+    }
+
     IERC20 public immutable brigidToken;
     address public immutable feeRecipient;
     address public immutable vaultFactory;
@@ -124,6 +130,7 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
     address public owner;
     address public pendingOwner;
     address public feeQuoteSigner;
+    address public externalLpLocker;
     bool public feeQuoteRequired;
 
     mapping(uint8 => uint256) public launchTierFees;
@@ -148,7 +155,13 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
     event LaunchTierStatusUpdated(uint8 indexed launchTier, bool enabled);
     event FeeQuoteSignerUpdated(address indexed previousSigner, address indexed newSigner);
     event FeeQuoteRequiredUpdated(bool required);
-    event FeeQuoteUsed(address indexed payer, uint8 indexed launchTier, uint256 amount, uint256 nonce, uint256 expiresAt);
+    event FeeQuoteUsed(
+        address indexed payer, uint8 indexed launchTier, uint256 amount, uint256 nonce, uint256 expiresAt
+    );
+    event ExternalLpLockerUpdated(address indexed previousLocker, address indexed newLocker);
+    event ExternalLpLockUsed(
+        bytes32 indexed launchId, address indexed provider, address indexed lockTarget, uint256 lockerFeeAmount
+    );
     event LaunchCreated(
         bytes32 indexed launchId,
         address indexed deployer,
@@ -198,6 +211,7 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
     error FeeTransferMismatch();
     error InsufficientEscrowedReserve(uint256 requested, uint256 available);
     error LockDurationTooShort(uint256 provided, uint256 minimumRequired);
+    error ExternalLpLockerNotConfigured();
     error NotPendingOwner();
 
     modifier onlyOwner() {
@@ -243,11 +257,7 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
         }
     }
 
-    function createLaunch(CreateLaunchParams calldata params)
-        external
-        nonReentrant
-        returns (bytes32 launchId)
-    {
+    function createLaunch(CreateLaunchParams calldata params) external nonReentrant returns (bytes32 launchId) {
         uint256 fee = _staticLaunchFeeForCreate(params.launchTier);
         launchId = _createLaunch(params, fee);
     }
@@ -283,31 +293,24 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
             uint256 recipientBalanceBefore = brigidToken.balanceOf(feeRecipient);
             brigidToken.safeTransferFrom(msg.sender, feeRecipient, fee);
             uint256 recipientBalanceAfter = brigidToken.balanceOf(feeRecipient);
-            if (
-                recipientBalanceAfter < recipientBalanceBefore
-                    || recipientBalanceAfter - recipientBalanceBefore != fee
-            ) {
+            if (recipientBalanceAfter < recipientBalanceBefore || recipientBalanceAfter - recipientBalanceBefore != fee)
+            {
                 revert FeeTransferMismatch();
             }
             emit FeePaid(msg.sender, params.launchTier, fee, feeRecipient);
         }
 
-        BrigidLaunchToken deployedToken = new BrigidLaunchToken(
-            params.tokenName,
-            params.tokenSymbol,
-            18,
-            address(this),
-            params.tokenSupply
-        );
+        BrigidLaunchToken deployedToken =
+            new BrigidLaunchToken(params.tokenName, params.tokenSymbol, 18, address(this), params.tokenSupply);
         address token = address(deployedToken);
 
         ILaunchToken tokenContract = ILaunchToken(token);
         if (
-            keccak256(bytes(IERC20Metadata(token).name())) != keccak256(bytes(params.tokenName)) ||
-            keccak256(bytes(IERC20Metadata(token).symbol())) != keccak256(bytes(params.tokenSymbol)) ||
-            tokenContract.totalSupply() != params.tokenSupply ||
-            tokenContract.balanceOf(address(this)) != params.tokenSupply ||
-            tokenContract.owner() != address(this)
+            keccak256(bytes(IERC20Metadata(token).name())) != keccak256(bytes(params.tokenName))
+                || keccak256(bytes(IERC20Metadata(token).symbol())) != keccak256(bytes(params.tokenSymbol))
+                || tokenContract.totalSupply() != params.tokenSupply
+                || tokenContract.balanceOf(address(this)) != params.tokenSupply
+                || tokenContract.owner() != address(this)
         ) {
             revert TokenValidationFailed();
         }
@@ -331,11 +334,7 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
         tokenContract.renounceOwnership();
         if (tokenContract.owner() != address(0)) revert RenounceFailed();
 
-        bytes32 registryLaunchId = ILaunchRegistry(launchRegistry).registerLaunchFor(
-            msg.sender,
-            token,
-            vaultAddresses
-        );
+        bytes32 registryLaunchId = ILaunchRegistry(launchRegistry).registerLaunchFor(msg.sender, token, vaultAddresses);
         if (registryLaunchId != launchId) revert RegistrationFailed();
 
         launches[launchId] = LaunchRecord({
@@ -363,11 +362,34 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
         nonReentrant
         onlyLaunchDeployer(params.launchId)
     {
+        _activateLaunch(params, msg.value, 0, false);
+    }
+
+    function activateLaunchWithExternalLocker(ExternalLockParams calldata params)
+        external
+        payable
+        nonReentrant
+        onlyLaunchDeployer(params.activation.launchId)
+    {
+        if (externalLpLocker == address(0)) revert ExternalLpLockerNotConfigured();
+        if (params.nativeLiquidityAmount == 0) revert ZeroAmount();
+        if (msg.value < params.nativeLiquidityAmount + params.lockerFeeAmount) revert ZeroAmount();
+
+        _activateLaunch(params.activation, params.nativeLiquidityAmount, params.lockerFeeAmount, true);
+    }
+
+    function _activateLaunch(
+        ActivateLaunchParams calldata params,
+        uint256 nativeLiquidityAmount,
+        uint256 lockerFeeAmount,
+        bool useExternalLocker
+    ) internal {
+        uint256 nativeBalanceBefore = address(this).balance - msg.value;
         LaunchRecord storage launch = launches[params.launchId];
         if (launch.state != LaunchState.CREATED) {
             revert LaunchNotInState(params.launchId, LaunchState.CREATED, launch.state);
         }
-        if (msg.value == 0) revert ZeroAmount();
+        if (nativeLiquidityAmount == 0) revert ZeroAmount();
         if (params.tokenAmountDesired == 0) revert ZeroAmount();
         if (params.lockDurationSeconds < minCertificationLock) {
             revert LockDurationTooShort(params.lockDurationSeconds, minCertificationLock);
@@ -380,8 +402,8 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
         tokenContract.forceApprove(pancakeRouter, params.tokenAmountDesired);
 
         uint256 deadline = block.timestamp + 1200;
-        (uint256 amountToken, uint256 amountETH, uint256 liquidity) =
-            IPancakeRouter(pancakeRouter).addLiquidityETH{value: msg.value}(
+        (uint256 amountToken, uint256 amountETH, uint256 liquidity) = IPancakeRouter(pancakeRouter)
+        .addLiquidityETH{value: nativeLiquidityAmount}(
             launch.token,
             params.tokenAmountDesired,
             params.tokenAmountMin,
@@ -397,22 +419,21 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
         if (lpPair == address(0)) revert RegistrationFailed();
 
         uint256 unlockTime = block.timestamp + params.lockDurationSeconds;
-        BrigidManagedLPLock lpLock = new BrigidManagedLPLock(
-            lpPair,
-            msg.sender,
-            address(this),
-            unlockTime
-        );
-
         uint256 lpBalance = IERC20(lpPair).balanceOf(address(this));
         if (lpBalance == 0) revert ZeroAmount();
-        IERC20(lpPair).forceApprove(address(lpLock), lpBalance);
-        lpLock.deposit(lpBalance);
+
+        address lpLockAddress;
+        if (useExternalLocker) {
+            lpLockAddress =
+                _lockWithExternalLocker(params.launchId, lpPair, msg.sender, lpBalance, unlockTime, lockerFeeAmount);
+        } else {
+            lpLockAddress = _lockWithBrigidLocker(lpPair, msg.sender, lpBalance, unlockTime);
+        }
 
         launch.state = LaunchState.CERTIFIED;
         launch.activatedAt = block.timestamp;
         launch.lpPair = lpPair;
-        launch.lpLock = address(lpLock);
+        launch.lpLock = lpLockAddress;
 
         uint256 reserveRemaining = launch.lpReserve - amountToken;
         launch.lpReserve = 0;
@@ -420,7 +441,8 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
             tokenContract.safeTransfer(msg.sender, reserveRemaining);
         }
 
-        uint256 unusedNative = msg.value - amountETH;
+        uint256 nativeBalanceAfter = address(this).balance;
+        uint256 unusedNative = nativeBalanceAfter > nativeBalanceBefore ? nativeBalanceAfter - nativeBalanceBefore : 0;
         if (unusedNative > 0) {
             (bool refundOk,) = msg.sender.call{value: unusedNative}("");
             if (!refundOk) {
@@ -433,22 +455,39 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
         }
 
         emit LaunchActivated(
-            params.launchId,
-            msg.sender,
-            lpPair,
-            address(lpLock),
-            amountToken,
-            amountETH,
-            params.lockDurationSeconds
+            params.launchId, msg.sender, lpPair, lpLockAddress, amountToken, amountETH, params.lockDurationSeconds
         );
         emit LaunchCertified(params.launchId);
     }
 
-    function markManualActivation(bytes32 launchId)
-        external
-        nonReentrant
-        onlyLaunchDeployer(launchId)
+    function _lockWithBrigidLocker(address lpPair, address beneficiary, uint256 lpBalance, uint256 unlockTime)
+        internal
+        returns (address lpLockAddress)
     {
+        BrigidManagedLPLock lpLock = new BrigidManagedLPLock(lpPair, beneficiary, address(this), unlockTime);
+        lpLockAddress = address(lpLock);
+        IERC20(lpPair).forceApprove(lpLockAddress, lpBalance);
+        lpLock.deposit(lpBalance);
+    }
+
+    function _lockWithExternalLocker(
+        bytes32 launchId,
+        address lpPair,
+        address beneficiary,
+        uint256 lpBalance,
+        uint256 unlockTime,
+        uint256 lockerFeeAmount
+    ) internal returns (address lockTarget) {
+        IERC20(lpPair).forceApprove(externalLpLocker, lpBalance);
+        lockTarget = IExternalLPLocker(externalLpLocker).lockLpTokens{value: lockerFeeAmount}(
+            lpPair, beneficiary, lpBalance, unlockTime
+        );
+        if (lockTarget == address(0)) revert ZeroAddress();
+        if (IERC20(lpPair).balanceOf(address(this)) != 0) revert ZeroAmount();
+        emit ExternalLpLockUsed(launchId, externalLpLocker, lockTarget, lockerFeeAmount);
+    }
+
+    function markManualActivation(bytes32 launchId) external nonReentrant onlyLaunchDeployer(launchId) {
         LaunchRecord storage launch = launches[launchId];
         if (launch.state != LaunchState.CREATED) {
             revert LaunchNotInState(launchId, LaunchState.CREATED, launch.state);
@@ -556,21 +595,25 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
         emit FeeQuoteRequiredUpdated(required);
     }
 
+    function setExternalLpLocker(address newLocker) external onlyOwner {
+        emit ExternalLpLockerUpdated(externalLpLocker, newLocker);
+        externalLpLocker = newLocker;
+    }
+
     function feeQuoteDigest(FeeQuote calldata quote) public view returns (bytes32) {
-        bytes32 structHash =
-            keccak256(
-                abi.encode(
-                    FEE_QUOTE_TYPEHASH,
-                    address(this),
-                    block.chainid,
-                    address(brigidToken),
-                    quote.payer,
-                    quote.launchTier,
-                    quote.feeAmount,
-                    quote.expiresAt,
-                    quote.nonce
-                )
-            );
+        bytes32 structHash = keccak256(
+            abi.encode(
+                FEE_QUOTE_TYPEHASH,
+                address(this),
+                block.chainid,
+                address(brigidToken),
+                quote.payer,
+                quote.launchTier,
+                quote.feeAmount,
+                quote.expiresAt,
+                quote.nonce
+            )
+        );
         return keccak256(abi.encodePacked("\x19\x01", _feeQuoteDomainSeparator(), structHash));
     }
 
@@ -588,11 +631,10 @@ contract BrigidLaunchOrchestrator is ReentrancyGuard {
         emit OwnershipTransferred(previousOwner, msg.sender);
     }
 
-    function _createVault(
-        address originalDeployer,
-        address token,
-        VaultConfig calldata vc
-    ) internal returns (address vault) {
+    function _createVault(address originalDeployer, address token, VaultConfig calldata vc)
+        internal
+        returns (address vault)
+    {
         (bool ok, bytes memory result) = vaultFactory.call(
             abi.encodeWithSignature(
                 "createVaultFor(address,address,address,address,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,bytes)",
@@ -699,12 +741,12 @@ interface ILaunchRegistry {
 interface IPancakeRouter {
     function addLiquidityETH(
         address token,
-        uint amountTokenDesired,
-        uint amountTokenMin,
-        uint amountETHMin,
+        uint256 amountTokenDesired,
+        uint256 amountTokenMin,
+        uint256 amountETHMin,
         address to,
-        uint deadline
-    ) external payable returns (uint amountToken, uint amountETH, uint liquidity);
+        uint256 deadline
+    ) external payable returns (uint256 amountToken, uint256 amountETH, uint256 liquidity);
 
     function factory() external view returns (address);
     function WETH() external view returns (address);
@@ -712,4 +754,11 @@ interface IPancakeRouter {
 
 interface IPancakeFactory {
     function getPair(address tokenA, address tokenB) external view returns (address pair);
+}
+
+interface IExternalLPLocker {
+    function lockLpTokens(address lpToken, address beneficiary, uint256 amount, uint256 unlockTime)
+        external
+        payable
+        returns (address lockTarget);
 }
