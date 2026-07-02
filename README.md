@@ -67,3 +67,4 @@ All rights are reserved unless and until a final public license is selected.
 ## Public Docs
 
 - [Public Development Log](docs/development-log-public.md)
+- [Security Policy](SECURITY.md)
