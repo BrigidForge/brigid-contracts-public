@@ -1,0 +1,18 @@
+{
+  "primaryNetwork": "bscMainnet",
+  "deploymentManifest": "deployments/bsc-mainnet.json",
+  "networks": {
+    "bscMainnet": {
+      "name": "BNB Smart Chain Mainnet",
+      "chainId": 56,
+      "rpcEnvironmentVariable": "BSC_MAINNET_RPC_URL",
+      "explorerUrl": "https://bscscan.com"
+    },
+    "bscTestnet": {
+      "name": "BNB Smart Chain Testnet",
+      "chainId": 97,
+      "rpcEnvironmentVariable": "BSC_TESTNET_RPC_URL",
+      "explorerUrl": "https://testnet.bscscan.com"
+    }
+  }
+}

@@ -1,6 +1,11 @@
 # Contract Source Index
 
-This directory contains the full public Brigid Forge production-facing contract source bundle.
+This directory contains the public Brigid Forge production-facing contract
+source bundle for BNB Smart Chain.
+
+The active BSC mainnet address-to-source mapping is recorded in
+[`../deployments/bsc-mainnet.json`](../deployments/bsc-mainnet.json). Build the
+complete bundle from the repository root with `npm ci && npm run build`.
 
 ## Vault And Launch Core
 

@@ -4,6 +4,29 @@ This document summarizes major public-facing milestones for the Brigid Forge con
 
 It is intentionally narrower than the full internal development log and focuses on contract evolution, hardening, testing, launch infrastructure, public release readiness, and source transparency.
 
+## 2026-08-26
+
+### BNB Chain public repository verification package
+
+- Added an explicit BNB Smart Chain Mainnet deployment manifest with active
+  contract addresses, compiler versions, source paths, and BscScan verification
+  links.
+- Added standalone Foundry and dependency configuration so the curated public
+  contract bundle can be compiled from a clean clone.
+- Expanded the public README with the Launch System dApp scope, supported chain
+  IDs, technology stack, source-version policy, build instructions, and clear
+  publication boundaries.
+- Added a minimal GitHub Actions build check for public contract compilation.
+
+## 2026-08-22
+
+### n8n retirement and immutable Solana build boundary
+
+- Confirmed that the former n8n automation stack is fully retired. Its May 2026 role covered subscription lifecycle webhooks, Beacon-event monitoring, launch-completion handling, and system-health workflows; active application and operations paths no longer depend on it.
+- Recorded that the July 2026 security finalization removed the n8n application, DNS, Nginx, certificate, and service paths. The remaining unreferenced n8n Docker volumes are retirement residue rather than an active recovery or testing dependency.
+- Preserved the server Docker engine and exact digest-pinned Anchor image because the Solana immutable-build gate still uses an ephemeral, constrained container to produce the attested Brigid Core SBF candidate.
+- Clarified that Brigid Herald's local MacBook container is independent of the server Docker store and cannot be affected by the guarded server-side n8n cleanup.
+
 ## 2026-07-01
 
 ### Production public-surface redesign and live data wiring

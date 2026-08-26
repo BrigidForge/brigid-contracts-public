@@ -1,0 +1,16 @@
+{
+  "name": "brigid-forge-public-contracts",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Public BNB Smart Chain contract source for the Brigid Forge Launch System",
+  "scripts": {
+    "build": "npm run build:launch && npm run build:staking",
+    "build:launch": "FOUNDRY_PROFILE=launch forge build",
+    "build:staking": "FOUNDRY_PROFILE=staking forge build",
+    "check": "npm run build"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "5.5.0"
+  },
+  "license": "UNLICENSED"
+}

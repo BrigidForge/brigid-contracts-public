@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 1,
+  "project": "Brigid Forge Launch System",
+  "dappUrl": "https://brigidforge.com/launch/",
+  "sourceRef": "refs/tags/dappbay-bsc-mainnet-2026-08-26",
+  "recordedAt": "2026-07-21",
+  "deploymentStatus": "deployed-mainnet-public-launch-gated",
+  "network": {
+    "name": "BNB Smart Chain Mainnet",
+    "chainId": 56,
+    "nativeCurrency": "BNB",
+    "explorerUrl": "https://bscscan.com"
+  },
+  "contracts": [
+    {
+      "name": "BRIGID token",
+      "contractName": "BrigidLaunchToken",
+      "address": "0x85050F141a6006075161EB4c2EeEdE65089d54d0",
+      "deploymentBlock": 103532838,
+      "compiler": "0.8.33",
+      "sourcePath": "contracts/BrigidLaunchToken.sol",
+      "explorerUrl": "https://bscscan.com/address/0x85050F141a6006075161EB4c2EeEdE65089d54d0#code"
+    },
+    {
+      "name": "BrigidVaultFactory",
+      "contractName": "BrigidVaultFactory",
+      "address": "0x22606599639c60383AE556391DCb7996A0382dfB",
+      "deploymentBlock": 102953033,
+      "indexerStartBlock": 102953006,
+      "compiler": "0.8.33",
+      "sourcePath": "contracts/BrigidVaultFactory.sol",
+      "explorerUrl": "https://bscscan.com/address/0x22606599639c60383AE556391DCb7996A0382dfB#code"
+    },
+    {
+      "name": "BrigidTokenRegistry",
+      "contractName": "BrigidTokenRegistry",
+      "address": "0x2a96f07049a467f9B3C27060AA40BD8C83C92Fd1",
+      "deploymentBlock": 102953022,
+      "compiler": "0.8.33",
+      "sourcePath": "contracts/BrigidTokenRegistry.sol",
+      "explorerUrl": "https://bscscan.com/address/0x2a96f07049a467f9B3C27060AA40BD8C83C92Fd1#code"
+    },
+    {
+      "name": "BrigidLaunchRegistry",
+      "contractName": "BrigidLaunchRegistry",
+      "address": "0x85e20467ef72d6715f314dA29c322bb183B88598",
+      "deploymentBlock": 103522897,
+      "indexerStartBlock": 103522885,
+      "compiler": "0.8.33",
+      "sourcePath": "contracts/BrigidLaunchRegistry.sol",
+      "explorerUrl": "https://bscscan.com/address/0x85e20467ef72d6715f314dA29c322bb183B88598#code"
+    },
+    {
+      "name": "BrigidLaunchOrchestrator",
+      "contractName": "BrigidLaunchOrchestrator",
+      "address": "0x45B55fd580bA221271b9F46eEEBca8F461749C60",
+      "compiler": "0.8.33",
+      "sourcePath": "contracts/imports/BrigidLaunchOrchestrator.sol",
+      "explorerUrl": "https://bscscan.com/address/0x45B55fd580bA221271b9F46eEEBca8F461749C60#code"
+    },
+    {
+      "name": "BrigidMemeLaunchRegistry",
+      "contractName": "BrigidMemeLaunchRegistry",
+      "address": "0x614bBAEBC7eb648CAAD2BA8992eF4bD62D82FDA2",
+      "deploymentBlock": 103536443,
+      "compiler": "0.8.33",
+      "sourcePath": "contracts/imports/BrigidMemeLaunchRegistry.sol",
+      "explorerUrl": "https://bscscan.com/address/0x614bBAEBC7eb648CAAD2BA8992eF4bD62D82FDA2#code"
+    },
+    {
+      "name": "BrigidMemeLaunchOrchestrator",
+      "contractName": "BrigidMemeLaunchOrchestrator",
+      "address": "0x57899eB20fA65134FB680BA6d6Ee1693E7619366",
+      "compiler": "0.8.33",
+      "sourcePath": "contracts/imports/BrigidMemeLaunchOrchestrator.sol",
+      "explorerUrl": "https://bscscan.com/address/0x57899eB20fA65134FB680BA6d6Ee1693E7619366#code"
+    },
+    {
+      "name": "BrigidUncxV1LPLockerAdapter",
+      "contractName": "BrigidUncxV1LPLockerAdapter",
+      "address": "0x7fd3BBada737dC9A90F23dDA30373fF163e2A29A",
+      "deploymentBlock": 107153050,
+      "compiler": "0.8.33",
+      "sourcePath": "contracts/BrigidUncxV1LPLockerAdapter.sol",
+      "explorerUrl": "https://bscscan.com/address/0x7fd3BBada737dC9A90F23dDA30373fF163e2A29A#code"
+    },
+    {
+      "name": "BrigidStaking",
+      "contractName": "BrigidStaking",
+      "address": "0xF5cbdf0E779B14fc0598166F75c87d08668b6D42",
+      "deploymentBlock": 103536614,
+      "compiler": "0.8.24",
+      "sourcePath": "contracts/staking/BrigidStaking.sol",
+      "explorerUrl": "https://bscscan.com/address/0xF5cbdf0E779B14fc0598166F75c87d08668b6D42#code"
+    },
+    {
+      "name": "BrigidRevenueRouter",
+      "contractName": "BrigidRevenueRouter",
+      "address": "0x55A4D0f14dc69fEa578fA4865b7e7E3b5eB5Be00",
+      "deploymentBlock": 103536619,
+      "compiler": "0.8.24",
+      "sourcePath": "contracts/staking/BrigidRevenueRouter.sol",
+      "explorerUrl": "https://bscscan.com/address/0x55A4D0f14dc69fEa578fA4865b7e7E3b5eB5Be00#code"
+    }
+  ]
+}
